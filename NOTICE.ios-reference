@@ -1,0 +1,39 @@
+Audacious Mobile
+
+This project ports and depends on third-party work:
+
+- Audacious (libaudcore), Packages/AudKit/Sources/AudCore/{core,libaudcore}
+  Copyright Audacious developers. BSD-2-Clause; see
+  Packages/AudKit/Sources/AudCore/COPYING.audacious.
+  Snapshot: audacious-media-player/audacious @ 929e89d.
+
+- Audacious plugins, Packages/AudKit/Sources/AudCore/upstream-plugins
+  (bitcrusher, compressor, crossfade, crystalizer, echo_plugin, mixer,
+  resample, silence-removal, speedpitch, stereo_plugin, voice_removal).
+  Copyright their authors; each under its own terms as stated in its source
+  file (BSD-2-Clause where stated). See
+  Packages/AudKit/Sources/AudCore/COPYING.audacious-plugins.
+  Snapshot: audacious-media-player/audacious-plugins @ 419f26c.
+
+- libsamplerate, Packages/AudKit/Sources/CSampleRate
+  Copyright Erik de Castro Lopo. BSD-2-Clause; see
+  Packages/AudKit/Sources/CSampleRate/COPYING.
+
+- ElectronPlayer (https://github.com/jpcarter34us/electronplayer): the
+  Subsonic, DAAP/DMAP and Music Assistant clients, the visualizer ports, and
+  the plugin-settings serializer are ported from it, as is the app icon.
+
+- Music Assistant sign-in flow (Packages/AudKit/Sources/AudKit/Sources/MusicAssistant.swift)
+  Adapted, by way of ElectronPlayer, from the Music Assistant mobile app,
+  https://github.com/music-assistant/mobile-app
+  (AuthenticationManager.kt, api/Request.kt). Copyright Music Assistant
+  contributors. Licensed under the Apache License, Version 2.0.
+
+- sendspin-js (https://github.com/Sendspin/sendspin-js) 5.0.0: the Sendspin
+  client in Packages/AudKit/Sources/AudKit/Sendspin (Noise transport, CPace
+  and PIN pairing, PSK store, clock filter, protocol handling) is ported
+  from its dist/core sources, and Packages/AudKit/Tests/SendspinHarness runs
+  it unchanged to produce test vectors and a mock server. Copyright Sendspin
+  Protocol Authors. Licensed under the Apache License, Version 2.0.
+
+A copy of the Apache License 2.0 is at https://www.apache.org/licenses/LICENSE-2.0
