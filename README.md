@@ -7,7 +7,7 @@ Not affiliated with the Audacious developers.
 ## Features
 
 - **Audacious sound:** the 10-band equalizer (with presets) and all 11 effect plugins from the iOS port: Bitcrusher, Dynamic Range Compressor, Crossfade, Crystalizer, Echo, Channel Mixer, Sample Rate Converter, Silence Removal, Speed and Pitch, Extra Stereo, Voice Removal. Each plugin's settings screen is generated from its own `PreferencesWidget` declarations. Effects can be switched mid-song, including ones that change the sample rate.
-- **Playback:** gapless between songs of the same format, crossfade, shuffle and repeat, a persistent playlist, network songs that play while they download, prefetch of the next network song, and Spectrum Analyzer / Blur Scope / VU Meter visualizations of what is being heard.
+- **Playback:** gapless between songs of the same format, crossfade, shuffle and repeat, a persistent playlist, network songs that play while they download, prefetch of the next network song, and Spectrum Analyzer / Blur Scope / VU Meter visualizations of what is being heard. The **Visualization** button on Now Playing chooses one, or None, as on iOS; the choice is remembered. It draws along the bottom of the cover, holds its last frame while paused and clears on stop.
 - **Formats:**
   - Native on every Android version: MP3, FLAC (including hi-res), WAV/AIFF, Ogg Vorbis, Ogg Opus.
   - Through Android's MediaCodec: AAC/M4A, plus whatever else the device decodes.

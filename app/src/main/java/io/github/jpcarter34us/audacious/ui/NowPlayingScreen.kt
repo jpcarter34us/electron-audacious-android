@@ -3,13 +3,15 @@ package io.github.jpcarter34us.audacious.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.Shader
+import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
+import android.widget.FrameLayout
 import android.widget.ImageView
-import android.widget.SeekBar
-import android.widget.TextView
 import io.github.jpcarter34us.audacious.App
 import io.github.jpcarter34us.audacious.R
 import io.github.jpcarter34us.audacious.engine.BlurScope
@@ -52,10 +54,19 @@ class NowPlayingScreen(activity: MainActivity) : Screen(activity) {
     private var coverKey: String? = null
 
     override val view: View = Ui.vertical(context, 16).apply {
-        val top = android.widget.FrameLayout(context)
+        add(FrameLayout(context).apply {
+            addView(Ui.icon(context, R.drawable.ic_waveform, 44, Ui.ACCENT) { chooseVisualization() }.apply {
+                contentDescription = "Visualization"
+            }, FrameLayout.LayoutParams(Ui.dp(context, 44), Ui.dp(context, 44), Gravity.START or Gravity.CENTER_VERTICAL))
+            addView(Ui.text(context, "Now Playing", 17f, bold = true),
+                FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+        })
+        val top = FrameLayout(context)
         top.addView(cover)
-        top.addView(vis)
-        add(top, h = 0, weight = 1f)
+        // The visualization along the bottom of the cover, as in Audacious's
+        // main window.
+        top.addView(vis, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, Ui.dp(context, 96), Gravity.BOTTOM))
+        add(top, h = 0, weight = 1f, top = 4)
         add(title, top = 12)
         add(subtitle, top = 2)
         add(status, top = 4)
@@ -82,26 +93,31 @@ class NowPlayingScreen(activity: MainActivity) : Screen(activity) {
     }
 
     init {
-        // Tapping the picture cycles cover / spectrum / scope / VU.
-        vis.setOnClickListener {
-            val kinds = VisualizerKind.values()
-            vis.kind = kinds[(vis.kind.ordinal + 1) % kinds.size]
-            Prefs.set("ui.visualizer", vis.kind.name)
-            Ui.toast(context, vis.kind.title)
-            refresh()
-        }
         watch(player.changed.watch { refresh() })
         watch(player.tick.watch { refreshTime() })
         refresh()
     }
 
     override fun shown() {
+        vis.shown = true
         refresh()
-        vis.running = true
     }
 
     override fun hidden() {
-        vis.running = false
+        vis.shown = false
+    }
+
+    private fun chooseVisualization() {
+        val kinds = VisualizerKind.values()
+        var dialog: android.app.AlertDialog? = null
+        dialog = Ui.dialog(context).setTitle("Visualization")
+            .setSingleChoiceItems(kinds.map { it.title }.toTypedArray(), vis.kind.ordinal) { _, i ->
+                vis.kind = kinds[i]
+                Prefs.set("ui.visualizer", vis.kind.name)
+                refresh()
+                dialog?.dismiss()
+            }
+            .setNegativeButton("Cancel", null).show()
     }
 
     private fun refresh() {
@@ -127,8 +143,8 @@ class NowPlayingScreen(activity: MainActivity) : Screen(activity) {
         shuffle.isEnabled = live == null
         position.isEnabled = live == null && player.duration != null && player.state != Player.State.STOPPED
         volume.progress = (player.volume * 100).toInt()
-        vis.visibility = if (vis.kind == VisualizerKind.OFF) View.INVISIBLE else View.VISIBLE
-        cover.alpha = if (vis.kind == VisualizerKind.OFF) 1f else 0.25f
+        vis.visibility = if (vis.kind == VisualizerKind.OFF) View.GONE else View.VISIBLE
+        vis.state = player.state
         val key = t?.let { it.id + (it.artworkKey ?: "") }
         if (key != coverKey) {
             coverKey = key
@@ -149,72 +165,135 @@ class NowPlayingScreen(activity: MainActivity) : Screen(activity) {
     }
 }
 
-/** Spectrum Analyzer, Blur Scope and VU Meter, drawn at about 30 fps from
- *  the output's visualization tap. */
+/** Spectrum Analyzer, Blur Scope and VU Meter, drawn about 30 times a second
+ *  from the output's visualization tap (the iOS port's VisualizerView): it
+ *  holds its last frame while paused and clears when playback stops. */
 class VisualizerView(context: Context) : View(context) {
     var kind: VisualizerKind = try {
         VisualizerKind.valueOf(Prefs.string("ui.visualizer", VisualizerKind.SPECTRUM.name))
     } catch (_: Exception) {
         VisualizerKind.SPECTRUM
     }
-    var running = false
         set(v) {
             field = v
-            if (v) postInvalidate()
+            update()
+        }
+    /** The screen is on show. */
+    var shown = false
+        set(v) {
+            field = v
+            update()
+        }
+    var state = Player.State.STOPPED
+        set(v) {
+            if (v == Player.State.STOPPED && field != v) clear()
+            field = v
+            update()
         }
     private val frame = VisFrame()
     private val spectrum = SpectrumAnalyzer()
     private val scope = BlurScope()
     private val vu = VUMeter()
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Ui.ACCENT }
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val track = Paint().apply { color = 0x14FFFFFF }
     private val scopeBitmap = Bitmap.createBitmap(scope.width, scope.height, Bitmap.Config.ARGB_8888)
     private val colors = IntArray(scope.width * scope.height)
     private val dst = Rect()
+    private var lastStep = 0L
+    private val tick = Runnable { invalidate() }
+
+    private val animating get() = shown && state == Player.State.PLAYING && kind != VisualizerKind.OFF
+
+    init {
+        background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0, 0xBF000000.toInt()))
+    }
+
+    private fun update() {
+        removeCallbacks(tick)
+        invalidate()
+    }
+
+    private fun clear() {
+        spectrum.clear()
+        scope.clear()
+        vu.clear()
+    }
+
+    /** One frame per tick: the system also redraws for layout. */
+    private fun step() {
+        val now = android.os.SystemClock.uptimeMillis()
+        if (now - lastStep < 25) return
+        lastStep = now
+        frame.capture()
+        when (kind) {
+            VisualizerKind.SPECTRUM -> spectrum.render(frame, width / Ui.dp(context, 10))
+            VisualizerKind.SCOPE -> scope.render(frame)
+            VisualizerKind.VU -> vu.render(frame)
+            VisualizerKind.OFF -> {}
+        }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        spectrumShader = LinearGradient(0f, h.toFloat(), 0f, 0f, Ui.ACCENT, 0xFFE0F0FF.toInt(), Shader.TileMode.CLAMP)
+        val inset = Ui.dp(context, 8).toFloat()
+        vuShader = LinearGradient(inset, 0f, w - inset, 0f, intArrayOf(0xFF34C759.toInt(), 0xFFFFD60A.toInt(), 0xFFFF3B30.toInt()),
+            floatArrayOf(0f, 0.75f, 1f), Shader.TileMode.CLAMP)
+    }
+
+    private var spectrumShader: Shader? = null
+    private var vuShader: Shader? = null
 
     override fun onDraw(canvas: Canvas) {
-        if (!running || kind == VisualizerKind.OFF) return
-        frame.capture()
+        if (kind == VisualizerKind.OFF) return
+        if (animating) step()
         val w = width.toFloat()
         val h = height.toFloat()
         when (kind) {
             VisualizerKind.SPECTRUM -> {
-                val bands = maxOf(12, (w / Ui.dp(context, 10)).toInt())
-                spectrum.render(frame, bands)
-                val bw = w / spectrum.bars.size
-                for ((i, v) in spectrum.bars.withIndex()) {
-                    val bh = v / SpectrumAnalyzer.RANGE * h
-                    canvas.drawRect(i * bw + 1, h - bh, (i + 1) * bw - 1, h, paint)
+                val bars = spectrum.bars
+                if (bars.isNotEmpty()) {
+                    paint.shader = spectrumShader
+                    val inset = Ui.dp(context, 4)
+                    val bw = w / bars.size
+                    for ((i, v) in bars.withIndex()) {
+                        if (v <= 0) continue
+                        val bh = v / SpectrumAnalyzer.RANGE * (h - 2 * inset)
+                        canvas.drawRect(i * bw + 1, h - inset - bh, (i + 1) * bw - 1, h - inset, paint)
+                    }
                 }
             }
             VisualizerKind.SCOPE -> {
-                scope.render(frame)
                 val r = Ui.ACCENT shr 16 and 0xFF
                 val g = Ui.ACCENT shr 8 and 0xFF
                 val b = Ui.ACCENT and 0xFF
-                for (i in colors.indices) {
-                    val a = scope.pixels[i]
-                    colors[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
-                }
+                for (i in colors.indices) colors[i] = (scope.pixels[i] shl 24) or (r shl 16) or (g shl 8) or b
                 scopeBitmap.setPixels(colors, 0, scope.width, 0, 0, scope.width, scope.height)
                 dst.set(0, 0, width, height)
                 canvas.drawBitmap(scopeBitmap, null, dst, null)
             }
             VisualizerKind.VU -> {
-                vu.render(frame)
                 val n = vu.level.size
-                val gap = Ui.dp(context, 8)
-                val barH = minOf(Ui.dp(context, 28).toFloat(), (h - gap * (n + 1)) / maxOf(1, n))
-                val top0 = (h - n * barH - (n - 1) * gap) / 2
-                for (c in 0 until n) {
-                    val top = top0 + c * (barH + gap)
-                    val level = (vu.level[c] + VUMeter.RANGE) / VUMeter.RANGE * w
-                    val peak = (vu.peak[c] + VUMeter.RANGE) / VUMeter.RANGE * w
-                    canvas.drawRect(0f, top, level, top + barH, paint)
-                    canvas.drawRect(maxOf(0f, peak - 4), top, peak, top + barH, paint)
+                if (n > 0) {
+                    paint.shader = vuShader
+                    val inset = Ui.dp(context, 8).toFloat()
+                    val full = w - 2 * inset
+                    val gap = maxOf(Ui.dp(context, 4).toFloat(), h * 0.08f)
+                    val barH = (h - gap * (n + 1)) / n
+                    for (c in 0 until n) {
+                        val top = gap + c * (barH + gap)
+                        val level = (vu.level[c] + VUMeter.RANGE) / VUMeter.RANGE * full
+                        val peak = (vu.peak[c] + VUMeter.RANGE) / VUMeter.RANGE * full
+                        canvas.drawRect(inset, top, inset + full, top + barH, track)
+                        canvas.drawRect(inset, top, inset + level, top + barH, paint)
+                        canvas.drawRect(inset + maxOf(0f, peak - Ui.dp(context, 2)), top, inset + peak, top + barH, paint)
+                    }
                 }
             }
             VisualizerKind.OFF -> {}
         }
-        postInvalidateDelayed(33)
+        if (animating) {
+            removeCallbacks(tick)
+            postDelayed(tick, 33)
+        }
     }
 }

@@ -3,7 +3,7 @@ package io.github.jpcarter34us.audacious.engine
 /** The visualizations, ported from the GTK/Qt plugins by way of
  *  ElectronPlayer's visualizers.ts and the iOS port's Visualizers.swift. */
 enum class VisualizerKind(val title: String) {
-    SPECTRUM("Spectrum Analyzer"), SCOPE("Blur Scope"), VU("VU Meter"), OFF("Off")
+    OFF("None"), SPECTRUM("Spectrum Analyzer"), SCOPE("Blur Scope"), VU("VU Meter")
 }
 
 /** cairo-spectrum / qt-spectrum: log-spaced bars over a 40 dB range with a
@@ -59,11 +59,16 @@ class SpectrumAnalyzer {
             }
         }
     }
+
+    fun clear() {
+        bars.fill(0f)
+        delay.fill(0)
+    }
 }
 
 /** blur_scope: an oscilloscope drawn into a small buffer that is blurred
  *  every frame, so old traces fade. */
-class BlurScope(val width: Int = 128, val height: Int = 64) {
+class BlurScope(val width: Int = 160, val height: Int = 64) {
     val pixels = IntArray(width * height)
 
     fun render(frame: VisFrame) {
@@ -92,6 +97,8 @@ class BlurScope(val width: Int = 128, val height: Int = 64) {
             pixels[pixels.size - 1 - i] = 0
         }
     }
+
+    fun clear() = pixels.fill(0)
 }
 
 /** vumeter: per-channel peak level in dB with a held peak marker. */
@@ -125,5 +132,10 @@ class VUMeter {
                 peakAge[c] = 0
             }
         }
+    }
+
+    fun clear() {
+        level.fill(-RANGE)
+        peak.fill(-RANGE)
     }
 }
